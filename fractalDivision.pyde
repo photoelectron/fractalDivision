@@ -1,21 +1,43 @@
-fc = 2; wd = ht = 1080/fc
+from Saver import saves
+N_PHI = 9*2;N_save = 9*2
+fc = 1; wd = 1080/fc; ht = 1080/fc
+
+lgt = ht #1.575       # initial length
+lgtx = .5           # length multiplier
+sep = ht/2**.5        # separation
+sepx = .5           # separation multiplier
+iterations = 9
+steps = 1           # steps per iteration
+parts = 4           # split into how many parts
+ang = TWO_PI/parts  # angle between parts
+huei = .85            # initial hue
+hueshift = .2
+
+nscale = 1e0
 
 def settings():
     size(wd,ht)
 
 def setup():
-    global F
+    global F, saving
     colorMode(HSB,1.)
     rectMode(CENTER)
-    noFill()
+    noStroke()
     background(0)
+    # frameRate(1)
+    noiseSeed(220)
+    saving = saves(N_PHI,N_save)
+    saving.onClick()
     ###
-    F = fractal(width/2,.25,width/4,10,240,4,.333)
+    F = fractal(lgt,lgtx,sep,sepx,iterations,steps,parts,hueshift)
 
 def draw():
     background(0)
     translate(width/2,height/2)
+    # rotate(TWO_PI/12)
     F.evolve()
+    print F.steps, F.iters
+    saving.save_frame()
 
 ###
 
@@ -32,7 +54,7 @@ class particle():
         with pushMatrix():
             translate(self.pos.x,self.pos.y)
             rotate(self.rot)
-            stroke(self.c)
+            fill(self.c)
             rect(0,0,self.L,self.L)
     
     def update(self,nL,npos,nrot,nc):
@@ -40,31 +62,39 @@ class particle():
         self.pos = npos; self.rot = nrot
 
 class fractal():
-    def __init__(self,L,Lmult,R,niter,nstep,npart,hshift):
+    def __init__(self,L,Lmult,R,Rmult,niter,nstep,npart,hshift):
         self.iters = 0; self.steps = self.nstep = nstep
-        self.ni = niter; self.np = npart
+        self.ni = niter; self.np = npart; self.hs = hshift
         self.L = L; self.Lmult = Lmult
-        self.R = R; self.hs = hshift
+        self.R = R; self.Rmult = Rmult
         self.p = [particle((L,L),(PVector(0,0),PVector(0,0)),
-                           (0,0),(color(.5,1,1),color(.5,1,1)))]
+                           (0,0),(color(huei,1,1),color(huei,1,1)))]
         self.p[0].show()
         self.growing = True
     
     def divide(self):
         pp = []
         self.L *= self.Lmult  # new length
+        self.R *= self.Rmult  # new separation
         for i in xrange(len(self.p)):
             nL = (self.p[i].L,self.L)
-            r = self.R/self.iters  # new position radius
             opos = self.p[i].pos
             orot = self.p[i].rot
             oc = self.p[i].c
             for j in xrange(self.np):
-                h = hue(oc) + self.hs*map(j,0,self.np,-.5,.5)
+                h = hue(oc) + self.hs*(map(j,0,self.np,-.5,.5) +
+                                       map(noise(i*nscale,j*nscale),
+                                           0,.8,-.5,.5))
+                # h = hue(oc) + \
+                #     self.hs*map(noise(i*nscale,j*nscale,self.iters*nscale),
+                #                 0,.8,-.5,.5)
                 nc = color(hloop(h),1,1) # new color
                 # new rotation
-                nrot = self.p[i].rot + map(j,0,self.np,-PI,PI)
-                npos = PVector(r*cos(nrot),r*sin(nrot)) # new pos
+                # nrot = self.p[i].rot + map(j,0,self.np,0,TWO_PI)
+                nrot = map(j,0,self.np,-PI,PI)
+                nang = (j%self.np)*ang+PI/4
+                npos = PVector(self.R*cos(nang),
+                               self.R*sin(nang)) # new pos
                 P = particle(nL,(opos,opos+npos),(orot,nrot),(oc,nc))
                 pp.append(P)
         self.p = pp[:]
@@ -85,14 +115,22 @@ class fractal():
     
     def evolve(self):
         if self.steps < self.nstep: 
-            self.grow(); self.steps += 1
+            self.steps += 1; self.grow() 
         else: 
             self.iters += 1
-            if self.iters > self.ni: noLoop()
-            self.divide(); self.steps = 0
+            if self.iters > self.ni: 
+                noLoop(); print 'finished'
+                self.show()
+                return
+            self.divide()
+            self.steps = 0; self.grow()
         self.show()
+        
 
 ###
 def hloop(h):
     if not(0<=h<1): return h - floor(h)
     else: return h
+
+def keyPressed():
+    if key == 's': saver.onClick()
